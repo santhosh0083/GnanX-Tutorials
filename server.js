@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
+const { MongoClient } = require("mongodb");
 
 const app = express();
 
@@ -13,6 +14,26 @@ const dataDir = path.join(__dirname, "data");
 const studentFile = path.join(dataDir, "students.json");
 const parentFile = path.join(dataDir, "parents.json");
 const tutorFile = path.join(dataDir, "tutors.json");
+
+const mongoUri = process.env.MONGODB_URI || null;
+let mongoClient = null;
+let db = null;
+
+async function initMongo() {
+  if (!mongoUri) return;
+  try {
+    mongoClient = new MongoClient(mongoUri);
+    await mongoClient.connect();
+    db = mongoClient.db(process.env.MONGODB_DB || "gnanx");
+    console.log("Connected to MongoDB");
+  } catch (err) {
+    console.error("MongoDB connection failed:", err.message || err);
+    mongoClient = null;
+    db = null;
+  }
+}
+
+initMongo();
 
 function readData(file) {
   try {
@@ -27,12 +48,9 @@ function saveData(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-app.post("/student", (req, res) => {
+app.post("/student", async (req, res) => {
   const submittedAt = new Date().toISOString();
-  const studentRecord = {
-    ...req.body,
-    submittedAt
-  };
+  const studentRecord = { ...req.body, submittedAt };
   const parentRecord = {
     parentName: req.body.parentName,
     parentPhone: req.body.parentPhone,
@@ -40,6 +58,17 @@ app.post("/student", (req, res) => {
     studentName: req.body.studentName,
     submittedAt
   };
+
+  if (db) {
+    try {
+      await db.collection("students").insertOne(studentRecord);
+      await db.collection("parents").insertOne(parentRecord);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Mongo insert error:", err);
+      // fallthrough to file fallback
+    }
+  }
 
   const students = readData(studentFile);
   students.push(studentRecord);
@@ -52,25 +81,58 @@ app.post("/student", (req, res) => {
   res.json({ success: true });
 });
 
-app.post("/tutor", (req, res) => {
+app.post("/tutor", async (req, res) => {
+  const record = { ...req.body, submittedAt: new Date().toISOString() };
+
+  if (db) {
+    try {
+      await db.collection("tutors").insertOne(record);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Mongo insert tutor error:", err);
+      // fallthrough to file fallback
+    }
+  }
+
   const data = readData(tutorFile);
-  data.push({
-    ...req.body,
-    submittedAt: new Date().toISOString()
-  });
+  data.push(record);
   saveData(tutorFile, data);
   res.json({ success: true });
 });
 
-app.get("/admin/students", (req, res) => {
+app.get("/admin/students", async (req, res) => {
+  if (db) {
+    try {
+      const rows = await db.collection("students").find().toArray();
+      return res.json(rows);
+    } catch (err) {
+      console.error("Mongo read students error:", err);
+    }
+  }
   res.json(readData(studentFile));
 });
 
-app.get("/admin/parents", (req, res) => {
+app.get("/admin/parents", async (req, res) => {
+  if (db) {
+    try {
+      const rows = await db.collection("parents").find().toArray();
+      return res.json(rows);
+    } catch (err) {
+      console.error("Mongo read parents error:", err);
+    }
+  }
   res.json(readData(parentFile));
 });
 
-app.get("/admin/tutors", (req, res) => {
+app.get("/admin/tutors", async (req, res) => {
+  if (db) {
+    try {
+      const rows = await db.collection("tutors").find().toArray();
+      return res.json(rows);
+    } catch (err) {
+      console.error("Mongo read tutors error:", err);
+    }
+  }
   res.json(readData(tutorFile));
 });
 
