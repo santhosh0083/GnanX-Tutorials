@@ -11,34 +11,62 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 const mongoUri = process.env.MONGODB_URI;
-let mongoClient = null;
 let db = null;
+let mongoClientPromise = null;
 
 if (!mongoUri) {
   console.error('MONGODB_URI is not set. Create a .env file or set the env variable.');
   process.exit(1);
 }
 
-async function initMongo() {
-  try {
-    mongoClient = new MongoClient(mongoUri, {
+async function getDb() {
+  if (!mongoClientPromise) {
+    const mongoClient = new MongoClient(mongoUri, {
       serverSelectionTimeoutMS: 10000
     });
-    await mongoClient.connect();
+    mongoClientPromise = mongoClient.connect();
+  }
+
+  if (!db) {
+    const mongoClient = await mongoClientPromise;
     db = mongoClient.db(process.env.MONGODB_DB || "gnanx");
+  }
+
+  return db;
+}
+
+getDb()
+  .then(() => {
     console.log("Connected to MongoDB");
-  } catch (err) {
+  })
+  .catch((err) => {
+    mongoClientPromise = null;
+    db = null;
     console.error("MongoDB connection failed:", err.message || err);
-    process.exit(1);
+  });
+
+async function withDb(res) {
+  try {
+    return await getDb();
+  } catch (err) {
+    mongoClientPromise = null;
+    db = null;
+    console.error("MongoDB connection failed:", err.message || err);
+    res.status(500).json({
+      success: false,
+      error: "Unable to connect to MongoDB. Check MONGODB_URI and Atlas Network Access."
+    });
+    return null;
   }
 }
 
-initMongo();
+app.get("/health", async (req, res) => {
+  const database = await withDb(res);
+  if (!database) return;
 
-app.get("/health", (req, res) => {
-  res.json({
+  return res.json({
     success: true,
-    database: db ? "connected" : "connecting"
+    database: "connected"
   });
 });
 
@@ -58,11 +86,12 @@ app.post("/student", async (req, res) => {
     submittedAt
   };
 
-  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
-
   try {
-    await db.collection("students").insertOne(studentRecord);
-    await db.collection("parents").insertOne(parentRecord);
+    const database = await withDb(res);
+    if (!database) return;
+
+    await database.collection("students").insertOne(studentRecord);
+    await database.collection("parents").insertOne(parentRecord);
     return res.json({ success: true });
   } catch (err) {
     console.error("Mongo insert error:", err);
@@ -78,10 +107,11 @@ app.post("/tutor", async (req, res) => {
 
   const record = { ...req.body, submittedAt: new Date().toISOString() };
 
-  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
-
   try {
-    await db.collection("tutors").insertOne(record);
+    const database = await withDb(res);
+    if (!database) return;
+
+    await database.collection("tutors").insertOne(record);
     return res.json({ success: true });
   } catch (err) {
     console.error("Mongo insert tutor error:", err);
@@ -90,9 +120,11 @@ app.post("/tutor", async (req, res) => {
 });
 
 app.get("/admin/students", async (req, res) => {
-  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
   try {
-    const rows = await db.collection("students").find().toArray();
+    const database = await withDb(res);
+    if (!database) return;
+
+    const rows = await database.collection("students").find().toArray();
     return res.json(rows);
   } catch (err) {
     console.error("Mongo read students error:", err);
@@ -101,9 +133,11 @@ app.get("/admin/students", async (req, res) => {
 });
 
 app.get("/admin/parents", async (req, res) => {
-  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
   try {
-    const rows = await db.collection("parents").find().toArray();
+    const database = await withDb(res);
+    if (!database) return;
+
+    const rows = await database.collection("parents").find().toArray();
     return res.json(rows);
   } catch (err) {
     console.error("Mongo read parents error:", err);
@@ -112,9 +146,11 @@ app.get("/admin/parents", async (req, res) => {
 });
 
 app.get("/admin/tutors", async (req, res) => {
-  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
   try {
-    const rows = await db.collection("tutors").find().toArray();
+    const database = await withDb(res);
+    if (!database) return;
+
+    const rows = await database.collection("tutors").find().toArray();
     return res.json(rows);
   } catch (err) {
     console.error("Mongo read tutors error:", err);
