@@ -25,13 +25,14 @@ function connectForm(formId, endpoint, statusId, successMessage) {
       });
 
       if (!response.ok) {
-        throw new Error("Request failed");
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Request failed");
       }
 
       status.textContent = successMessage;
       form.reset();
-    } catch {
-      status.textContent = "Please try again or contact us on WhatsApp.";
+    } catch (error) {
+      status.textContent = error.message || "Please try again or contact us on WhatsApp.";
     }
   });
 }

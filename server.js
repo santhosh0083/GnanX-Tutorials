@@ -33,18 +33,12 @@ async function initMongo() {
 
 initMongo();
 
-function readData(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return [];
-  }
-}
-
-function saveData(file, data) {
-  fs.mkdirSync(dataDir, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
+app.get("/health", (req, res) => {
+  res.json({
+    success: true,
+    database: db ? "connected" : "connecting"
+  });
+});
 
 app.post("/student", async (req, res) => {
   // Basic validation

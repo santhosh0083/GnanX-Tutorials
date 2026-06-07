@@ -16,8 +16,10 @@ async function run() {
     const db = client.db(dbName);
     const studentsDel = await db.collection('students').deleteMany({ studentName: { $in: ['AutoTest','FinalTest','YouTest'] } });
     const parentsDel = await db.collection('parents').deleteMany({ parentEmail: { $in: ['auto@local','final@local','you@local'] } });
+    const tutorsDel = await db.collection('tutors').deleteMany({ email: { $in: ['auto@local','final@local','you@local'] } });
     console.log('Deleted students:', studentsDel.deletedCount);
     console.log('Deleted parents:', parentsDel.deletedCount);
+    console.log('Deleted tutors:', tutorsDel.deletedCount);
   } catch (err) {
     console.error(err);
     process.exitCode = 1;
