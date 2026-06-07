@@ -1,5 +1,5 @@
+require('dotenv').config();
 const express = require("express");
-const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 const { MongoClient } = require("mongodb");
@@ -10,17 +10,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-const dataDir = path.join(__dirname, "data");
-const studentFile = path.join(dataDir, "students.json");
-const parentFile = path.join(dataDir, "parents.json");
-const tutorFile = path.join(dataDir, "tutors.json");
-
-const mongoUri = process.env.MONGODB_URI || null;
+const mongoUri = process.env.MONGODB_URI;
 let mongoClient = null;
 let db = null;
 
+if (!mongoUri) {
+  console.error('MONGODB_URI is not set. Create a .env file or set the env variable.');
+  process.exit(1);
+}
+
 async function initMongo() {
-  if (!mongoUri) return;
   try {
     mongoClient = new MongoClient(mongoUri);
     await mongoClient.connect();
@@ -28,8 +27,7 @@ async function initMongo() {
     console.log("Connected to MongoDB");
   } catch (err) {
     console.error("MongoDB connection failed:", err.message || err);
-    mongoClient = null;
-    db = null;
+    process.exit(1);
   }
 }
 
@@ -49,6 +47,11 @@ function saveData(file, data) {
 }
 
 app.post("/student", async (req, res) => {
+  // Basic validation
+  if (!req.body || !req.body.studentName || !req.body.parentName || !req.body.parentEmail) {
+    return res.status(400).json({ success: false, error: 'Missing required fields: studentName, parentName, parentEmail' });
+  }
+
   const submittedAt = new Date().toISOString();
   const studentRecord = { ...req.body, submittedAt };
   const parentRecord = {
@@ -59,81 +62,68 @@ app.post("/student", async (req, res) => {
     submittedAt
   };
 
-  if (db) {
-    try {
-      await db.collection("students").insertOne(studentRecord);
-      await db.collection("parents").insertOne(parentRecord);
-      return res.json({ success: true });
-    } catch (err) {
-      console.error("Mongo insert error:", err);
-      // fallthrough to file fallback
-    }
+  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
+
+  try {
+    await db.collection("students").insertOne(studentRecord);
+    await db.collection("parents").insertOne(parentRecord);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Mongo insert error:", err);
+    return res.status(500).json({ success: false });
   }
-
-  const students = readData(studentFile);
-  students.push(studentRecord);
-  saveData(studentFile, students);
-
-  const parents = readData(parentFile);
-  parents.push(parentRecord);
-  saveData(parentFile, parents);
-
-  res.json({ success: true });
 });
 
 app.post("/tutor", async (req, res) => {
-  const record = { ...req.body, submittedAt: new Date().toISOString() };
-
-  if (db) {
-    try {
-      await db.collection("tutors").insertOne(record);
-      return res.json({ success: true });
-    } catch (err) {
-      console.error("Mongo insert tutor error:", err);
-      // fallthrough to file fallback
-    }
+  // Basic validation
+  if (!req.body || !req.body.name || !req.body.email) {
+    return res.status(400).json({ success: false, error: 'Missing required fields: name, email' });
   }
 
-  const data = readData(tutorFile);
-  data.push(record);
-  saveData(tutorFile, data);
-  res.json({ success: true });
+  const record = { ...req.body, submittedAt: new Date().toISOString() };
+
+  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
+
+  try {
+    await db.collection("tutors").insertOne(record);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Mongo insert tutor error:", err);
+    return res.status(500).json({ success: false });
+  }
 });
 
 app.get("/admin/students", async (req, res) => {
-  if (db) {
-    try {
-      const rows = await db.collection("students").find().toArray();
-      return res.json(rows);
-    } catch (err) {
-      console.error("Mongo read students error:", err);
-    }
+  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
+  try {
+    const rows = await db.collection("students").find().toArray();
+    return res.json(rows);
+  } catch (err) {
+    console.error("Mongo read students error:", err);
+    return res.status(500).json({ success: false });
   }
-  res.json(readData(studentFile));
 });
 
 app.get("/admin/parents", async (req, res) => {
-  if (db) {
-    try {
-      const rows = await db.collection("parents").find().toArray();
-      return res.json(rows);
-    } catch (err) {
-      console.error("Mongo read parents error:", err);
-    }
+  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
+  try {
+    const rows = await db.collection("parents").find().toArray();
+    return res.json(rows);
+  } catch (err) {
+    console.error("Mongo read parents error:", err);
+    return res.status(500).json({ success: false });
   }
-  res.json(readData(parentFile));
 });
 
 app.get("/admin/tutors", async (req, res) => {
-  if (db) {
-    try {
-      const rows = await db.collection("tutors").find().toArray();
-      return res.json(rows);
-    } catch (err) {
-      console.error("Mongo read tutors error:", err);
-    }
+  if (!db) return res.status(500).json({ success: false, error: 'DB not connected' });
+  try {
+    const rows = await db.collection("tutors").find().toArray();
+    return res.json(rows);
+  } catch (err) {
+    console.error("Mongo read tutors error:", err);
+    return res.status(500).json({ success: false });
   }
-  res.json(readData(tutorFile));
 });
 
 const PORT = process.env.PORT || 8080;
