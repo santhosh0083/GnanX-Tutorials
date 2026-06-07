@@ -21,7 +21,9 @@ if (!mongoUri) {
 
 async function initMongo() {
   try {
-    mongoClient = new MongoClient(mongoUri);
+    mongoClient = new MongoClient(mongoUri, {
+      serverSelectionTimeoutMS: 10000
+    });
     await mongoClient.connect();
     db = mongoClient.db(process.env.MONGODB_DB || "gnanx");
     console.log("Connected to MongoDB");

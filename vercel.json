@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/student",
+      "destination": "/api/student"
+    },
+    {
+      "source": "/tutor",
+      "destination": "/api/tutor"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/health"
+    }
+  ]
+}

@@ -1,30 +1,37 @@
-import { MongoClient } from "mongodb";
+const { getDb } = require("./_mongo");
 
-const uri = process.env.MONGODB_URI;
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ success: false, error: "Method not allowed" });
   }
+
+  if (!req.body || !req.body.studentName || !req.body.parentName || !req.body.parentEmail) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required fields: studentName, parentName, parentEmail"
+    });
+  }
+
+  const submittedAt = new Date().toISOString();
+  const studentRecord = { ...req.body, submittedAt };
+  const parentRecord = {
+    parentName: req.body.parentName,
+    parentPhone: req.body.parentPhone,
+    parentEmail: req.body.parentEmail,
+    studentName: req.body.studentName,
+    submittedAt
+  };
 
   try {
-    const client = new MongoClient(uri);
-
-    await client.connect();
-
-    const db = client.db("gnanx");
-    const collection = db.collection("students");
-
-    await collection.insertOne({
-      ...req.body,
-      createdAt: new Date()
-    });
-
-    await client.close();
-
-    res.status(200).json({ success: true });
+    const db = await getDb();
+    await db.collection("students").insertOne(studentRecord);
+    await db.collection("parents").insertOne(parentRecord);
+    return res.status(200).json({ success: true });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false });
+    console.error("Mongo insert student error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Unable to store student enquiry"
+    });
   }
-}
+};
